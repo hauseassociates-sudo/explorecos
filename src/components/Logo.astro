@@ -1,0 +1,18 @@
+---
+interface Props {
+  variant?: 'default' | 'light';
+  class?: string;
+}
+const { variant = 'default', class: className = '' } = Astro.props;
+const primary = variant === 'light' ? 'text-sand-50' : 'text-mountain-900';
+const accent = variant === 'light' ? 'text-clay-300' : 'text-clay-500';
+---
+<a href="/" class={`group inline-flex items-center gap-2 ${className}`} aria-label="ExploreCOS home">
+  <svg viewBox="0 0 40 40" class="h-8 w-8" aria-hidden="true">
+    <path d="M2 32 L12 16 L18 24 L26 10 L38 32 Z" fill="currentColor" class={variant === 'light' ? 'text-forest-400' : 'text-forest-600'} />
+    <circle cx="30" cy="9" r="3.5" fill="currentColor" class={variant === 'light' ? 'text-clay-300' : 'text-clay-500'} />
+  </svg>
+  <span class={`font-display text-xl font-bold tracking-tight ${primary}`}>
+    Explore<span class={`font-bold ${accent}`}>COS</span>
+  </span>
+</a>

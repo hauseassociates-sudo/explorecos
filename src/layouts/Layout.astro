@@ -1,0 +1,84 @@
+---
+import '../styles/global.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+
+interface Props {
+  /** Page-specific title. Wrapped as `${title} | ExploreCOS` unless titleOverride is set. */
+  title?: string;
+  /** Use the supplied title verbatim (no site suffix). For the home page. */
+  titleOverride?: boolean;
+  /** Meta description for the page. */
+  description?: string;
+  /** Path to an OG image, relative to /. Defaults to the brand image. */
+  ogImage?: string;
+  /** OG type — 'website' for most pages, 'article' for listing detail pages. */
+  ogType?: 'website' | 'article';
+  /** Hide the page from search engines. */
+  noindex?: boolean;
+}
+
+const {
+  title = 'A local guide to Colorado Springs',
+  titleOverride = false,
+  description = 'Hand-picked trails, restaurants, and day trips in Colorado Springs, curated for vacation rental guests.',
+  ogImage = '/og-default.png',
+  ogType = 'website',
+  noindex = false,
+} = Astro.props;
+
+const SITE_NAME = 'ExploreCOS';
+const fullTitle = titleOverride ? title : `${title} | ${SITE_NAME}`;
+
+// Canonical URL — Astro.site is set in astro.config.mjs.
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const ogImageAbsolute = new URL(ogImage, Astro.site).toString();
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#1e3a5f" />
+
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+
+    {/* Open Graph */}
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImageAbsolute} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_US" />
+
+    {/* Twitter */}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageAbsolute} />
+
+    {/* Preconnect to font hosts to shave a few hundred ms */}
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    {/* Optional extra <head> content per page — used for JSON-LD, etc. */}
+    <slot name="head" />
+  </head>
+  <body class="flex min-h-screen flex-col">
+    <Header />
+    <main class="flex-1">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

@@ -1,0 +1,212 @@
+---
+import { getCollection, type CollectionEntry } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+import { CATEGORY_META } from '../../content/config';
+
+export async function getStaticPaths() {
+  const listings = await getCollection('listings');
+  return listings.map((entry) => ({
+    params: { slug: entry.slug },
+    props: { entry },
+  }));
+}
+
+interface Props {
+  entry: CollectionEntry<'listings'>;
+}
+const { entry } = Astro.props;
+const { Content } = await entry.render();
+const {
+  name,
+  category,
+  address,
+  description,
+  photos,
+  hours,
+  website,
+  phone,
+  priceRange,
+  coordinates,
+} = entry.data;
+const catMeta = CATEGORY_META[category];
+const mapUrl = `https://www.google.com/maps/search/?api=1&query=${coordinates.lat},${coordinates.lng}`;
+const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.lat},${coordinates.lng}`;
+const cover = photos[0];
+const rest = photos.slice(1);
+
+// Pick the most specific Schema.org type per category for richer search results.
+const SCHEMA_TYPE_BY_CATEGORY: Record<typeof category, string> = {
+  'restaurants-food': 'Restaurant',
+  'museums': 'Museum',
+  'parks': 'Park',
+  'hiking-trails': 'TouristAttraction',
+  'attractions': 'TouristAttraction',
+  'family-activities': 'TouristAttraction',
+  'day-trips': 'TouristAttraction',
+  'shopping': 'Store',
+  'nightlife': 'BarOrPub',
+};
+
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+
+const placeJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': SCHEMA_TYPE_BY_CATEGORY[category] ?? 'TouristAttraction',
+  name,
+  description,
+  url: canonical,
+  image: photos.length > 0 ? photos : undefined,
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: address,
+    addressLocality: 'Colorado Springs',
+    addressRegion: 'CO',
+    addressCountry: 'US',
+  },
+  geo: {
+    '@type': 'GeoCoordinates',
+    latitude: coordinates.lat,
+    longitude: coordinates.lng,
+  },
+  ...(phone ? { telephone: phone } : {}),
+  ...(website ? { sameAs: [website] } : {}),
+  ...(priceRange ? { priceRange } : {}),
+  ...(hours ? { openingHours: hours } : {}),
+};
+
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: new URL('/', Astro.site).toString() },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: catMeta.title,
+      item: new URL(`/categories/${category}`, Astro.site).toString(),
+    },
+    { '@type': 'ListItem', position: 3, name, item: canonical },
+  ],
+};
+---
+<Layout
+  title={name}
+  description={description}
+  ogType="article"
+  ogImage={cover ?? '/og-default.png'}
+>
+  <Fragment slot="head">
+    <script type="application/ld+json" set:html={JSON.stringify(placeJsonLd)} />
+    <script type="application/ld+json" set:html={JSON.stringify(breadcrumbJsonLd)} />
+  </Fragment>
+  <article>
+    <section class="border-b border-mountain-100 bg-sand-50">
+      <div class="container-page py-8 sm:py-12">
+        <nav class="text-xs font-medium text-mountain-500" aria-label="Breadcrumb">
+          <a href="/" class="hover:text-mountain-800">Home</a>
+          <span class="px-1.5">/</span>
+          <a href={`/categories/${category}`} class="hover:text-mountain-800">{catMeta.title}</a>
+          <span class="px-1.5">/</span>
+          <span class="text-mountain-700">{name}</span>
+        </nav>
+        <div class="mt-4 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <span class="chip">{catMeta.emoji} {catMeta.title}</span>
+            <h1 class="mt-3 font-display text-3xl font-semibold sm:text-4xl lg:text-5xl">{name}</h1>
+            <p class="mt-2 text-mountain-600">{address}</p>
+          </div>
+          {priceRange && (
+            <span class="rounded-full bg-white px-4 py-2 text-sm font-semibold text-mountain-700 shadow-sm">
+              {priceRange}
+            </span>
+          )}
+        </div>
+      </div>
+    </section>
+
+    {photos.length > 0 && (
+      <section class="container-page pt-8">
+        <div class="grid gap-3 sm:grid-cols-4 sm:grid-rows-2">
+          <img
+            src={cover}
+            alt={name}
+            class="aspect-[4/3] w-full rounded-2xl object-cover sm:col-span-2 sm:row-span-2 sm:aspect-auto sm:h-full"
+          />
+          {rest.slice(0, 4).map((src, i) => (
+            <img
+              src={src}
+              alt={`${name} photo ${i + 2}`}
+              loading="lazy"
+              class="aspect-[4/3] w-full rounded-2xl object-cover"
+            />
+          ))}
+        </div>
+      </section>
+    )}
+
+    <section class="container-page grid gap-10 py-10 lg:grid-cols-[2fr_1fr] lg:py-14">
+      <div class="prose prose-mountain max-w-none">
+        <p class="font-display text-xl leading-relaxed text-mountain-800">{description}</p>
+        <div class="mt-6 text-mountain-700 leading-relaxed [&>p]:mt-4">
+          <Content />
+        </div>
+      </div>
+
+      <aside class="space-y-4">
+        <div class="rounded-2xl border border-mountain-100 bg-white p-5 shadow-card">
+          <h2 class="font-display text-lg font-semibold">The essentials</h2>
+          <dl class="mt-4 space-y-3 text-sm">
+            <div class="flex gap-3">
+              <dt class="w-20 shrink-0 text-mountain-500">Address</dt>
+              <dd class="text-mountain-800">{address}</dd>
+            </div>
+            {hours && (
+              <div class="flex gap-3">
+                <dt class="w-20 shrink-0 text-mountain-500">Hours</dt>
+                <dd class="text-mountain-800">{hours}</dd>
+              </div>
+            )}
+            {phone && (
+              <div class="flex gap-3">
+                <dt class="w-20 shrink-0 text-mountain-500">Phone</dt>
+                <dd><a href={`tel:${phone.replace(/[^0-9+]/g, '')}`} class="text-forest-700 hover:underline">{phone}</a></dd>
+              </div>
+            )}
+            {website && (
+              <div class="flex gap-3">
+                <dt class="w-20 shrink-0 text-mountain-500">Website</dt>
+                <dd class="truncate">
+                  <a href={website} target="_blank" rel="noopener" class="text-forest-700 hover:underline">
+                    {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                  </a>
+                </dd>
+              </div>
+            )}
+            {priceRange && (
+              <div class="flex gap-3">
+                <dt class="w-20 shrink-0 text-mountain-500">Price</dt>
+                <dd class="text-mountain-800">{priceRange}</dd>
+              </div>
+            )}
+          </dl>
+          <div class="mt-5 flex flex-wrap gap-2">
+            <a href={directionsUrl} target="_blank" rel="noopener" class="btn-primary">Get directions</a>
+            <a href={mapUrl} target="_blank" rel="noopener" class="btn-secondary">View map</a>
+          </div>
+        </div>
+
+        <div class="overflow-hidden rounded-2xl border border-mountain-100 bg-white shadow-card">
+          <iframe
+            title={`Map of ${name}`}
+            loading="lazy"
+            class="aspect-[4/3] w-full"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${coordinates.lng - 0.01},${coordinates.lat - 0.008},${coordinates.lng + 0.01},${coordinates.lat + 0.008}&layer=mapnik&marker=${coordinates.lat},${coordinates.lng}`}
+          ></iframe>
+          <div class="px-4 py-3 text-xs text-mountain-500">
+            {coordinates.lat.toFixed(4)}, {coordinates.lng.toFixed(4)}
+          </div>
+        </div>
+      </aside>
+    </section>
+  </article>
+</Layout>

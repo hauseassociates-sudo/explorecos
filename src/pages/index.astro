@@ -1,0 +1,76 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../layouts/Layout.astro';
+import CategoryCard from '../components/CategoryCard.astro';
+import ListingCard from '../components/ListingCard.astro';
+import { CATEGORIES } from '../content/config';
+
+const allListings = await getCollection('listings');
+const featured = allListings
+  .filter((l) => l.data.featured)
+  .sort((a, b) => {
+    if (a.data.lloydsPick !== b.data.lloydsPick) return a.data.lloydsPick ? -1 : 1;
+    return a.data.name.localeCompare(b.data.name);
+  })
+  .slice(0, 6);
+
+const countsByCategory = Object.fromEntries(
+  CATEGORIES.map((slug) => [slug, allListings.filter((l) => l.data.category === slug).length])
+) as Record<(typeof CATEGORIES)[number], number>;
+---
+<Layout
+  title="ExploreCOS — A local guide to Colorado Springs"
+  titleOverride={true}
+  description="Hand-picked trails, restaurants, parks, and day trips in Colorado Springs — a curated local guide for vacation rental guests."
+>
+  <section class="relative overflow-hidden bg-gradient-to-b from-mountain-900 via-mountain-800 to-forest-700">
+    <div class="absolute inset-0 opacity-20" aria-hidden="true">
+      <svg viewBox="0 0 1200 400" preserveAspectRatio="none" class="h-full w-full">
+        <path d="M0 320 L180 180 L280 240 L420 120 L560 220 L720 100 L880 220 L1040 140 L1200 240 L1200 400 L0 400 Z" fill="#547840"/>
+        <path d="M0 360 L120 260 L260 320 L380 240 L520 300 L660 220 L800 300 L960 260 L1100 320 L1200 300 L1200 400 L0 400 Z" fill="#334a28" opacity="0.8"/>
+      </svg>
+    </div>
+    <div class="container-page relative py-20 sm:py-28 lg:py-32">
+      <p class="text-sm font-semibold uppercase tracking-[0.2em] text-clay-300">Your Colorado Springs concierge</p>
+      <h1 class="mt-4 max-w-3xl font-display text-4xl font-semibold leading-tight text-white sm:text-5xl lg:text-6xl">
+        Find the best of Colorado Springs, from our doorstep to yours.
+      </h1>
+      <p class="mt-6 max-w-2xl text-lg leading-relaxed text-sand-100/90">
+        Welcome to your home away from home. ExploreCOS gathers the trails, restaurants, and local
+        gems we'd recommend to a friend — no tourist traps, just the good stuff.
+      </p>
+      <div class="mt-8 flex flex-wrap gap-3">
+        <a href="/categories/hiking-trails" class="btn-primary">Hit the trails</a>
+        <a href="/categories/restaurants-food" class="btn-secondary">Where to eat</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="container-page py-16 sm:py-20">
+    <div class="flex items-end justify-between">
+      <div>
+        <h2 class="font-display text-3xl font-semibold sm:text-4xl">Browse by category</h2>
+        <p class="mt-2 text-mountain-600">Pick a vibe — we'll handle the rest.</p>
+      </div>
+    </div>
+    <div class="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {CATEGORIES.map((slug) => (
+        <CategoryCard slug={slug} count={countsByCategory[slug]} />
+      ))}
+    </div>
+  </section>
+
+  {featured.length > 0 && (
+    <section class="container-page pb-20">
+      <div class="flex items-end justify-between">
+        <div>
+          <h2 class="font-display text-3xl font-semibold sm:text-4xl">Guest favorites</h2>
+          <p class="mt-2 text-mountain-600">Places our guests come back for.</p>
+        </div>
+      </div>
+      <div class="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {featured.map((entry) => <ListingCard entry={entry} />)}
+      </div>
+    </section>
+  )}
+</Layout>
