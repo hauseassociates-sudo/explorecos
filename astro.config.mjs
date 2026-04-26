@@ -7,10 +7,6 @@ export default defineConfig({
   site: 'https://explorecos.com',
   integrations: [
     tailwind({ applyBaseStyles: false }),
-    sitemap({
-      changefreq: 'weekly',
-      priority: 0.7,
-      lastmod: new Date(),
-    }),
+    sitemap(),
   ],
 });
