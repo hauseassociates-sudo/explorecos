@@ -3,7 +3,7 @@ import { getCollection } from 'astro:content';
 import Layout from '../layouts/Layout.astro';
 import CategoryCard from '../components/CategoryCard.astro';
 import ListingCard from '../components/ListingCard.astro';
-import { CATEGORIES } from '../content/config';
+import { CATEGORIES, CATEGORY_META } from '../content/config';
 
 const allListings = await getCollection('listings');
 const featured = allListings
@@ -17,9 +17,21 @@ const featured = allListings
 const countsByCategory = Object.fromEntries(
   CATEGORIES.map((slug) => [slug, allListings.filter((l) => l.data.category === slug).length])
 ) as Record<(typeof CATEGORIES)[number], number>;
+
+// Compact search index for the homepage search.
+const searchIndex = allListings.map((l) => ({
+  slug: l.slug,
+  name: l.data.name,
+  category: l.data.category,
+  categoryTitle: CATEGORY_META[l.data.category].title,
+  categoryEmoji: CATEGORY_META[l.data.category].emoji,
+  description: l.data.description,
+  photo: l.data.photos[0] ?? null,
+  lloydsPick: l.data.lloydsPick ?? false,
+}));
 ---
 <Layout
-  title="ExploreCOS — A local guide to Colorado Springs"
+  title="ExploreCOS — A local guide to Colorado Springs for visitors"
   titleOverride={true}
   description="Hand-picked trails, restaurants, parks, and day trips in Colorado Springs — a curated local guide for vacation rental guests."
 >
@@ -42,6 +54,47 @@ const countsByCategory = Object.fromEntries(
       <div class="mt-8 flex flex-wrap gap-3">
         <a href="/categories/hiking-trails" class="btn-primary">Hit the trails</a>
         <a href="/categories/restaurants-food" class="btn-secondary">Where to eat</a>
+        <a href="/near-me" class="inline-flex items-center gap-1.5 rounded-full border border-sand-100/30 bg-mountain-900/30 px-5 py-2.5 text-sm font-semibold text-sand-100 backdrop-blur transition hover:border-clay-300 hover:text-clay-200">
+          <span aria-hidden="true">📍</span>
+          <span>Near me</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="relative -mt-10 sm:-mt-14">
+    <div class="container-page">
+      <div class="rounded-3xl bg-white p-4 shadow-card-hover ring-1 ring-mountain-100 sm:p-5">
+        <label for="cos-search" class="sr-only">Search ExploreCOS</label>
+        <div class="relative">
+          <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-mountain-400" aria-hidden="true">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="7"/>
+              <path stroke-linecap="round" d="m20 20-3.5-3.5"/>
+            </svg>
+          </span>
+          <input
+            id="cos-search"
+            type="search"
+            placeholder="Search trails, restaurants, places…"
+            autocomplete="off"
+            class="block w-full rounded-2xl border border-mountain-100 bg-sand-50 py-3 pl-11 pr-4 text-base text-mountain-900 placeholder:text-mountain-400 focus:border-forest-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-forest-200"
+            data-search-input
+            aria-controls="cos-search-results"
+            aria-expanded="false"
+          />
+          <div
+            id="cos-search-results"
+            class="absolute left-0 right-0 top-full z-30 mt-2 hidden overflow-hidden rounded-2xl border border-mountain-100 bg-white shadow-card-hover"
+            data-search-results
+            role="listbox"
+          ></div>
+        </div>
+        <p class="mt-3 px-2 text-xs text-mountain-500">
+          Try <button type="button" class="underline hover:text-forest-700" data-search-suggest>Garden of the Gods</button>,
+          <button type="button" class="underline hover:text-forest-700" data-search-suggest>green chile</button>, or
+          <button type="button" class="underline hover:text-forest-700" data-search-suggest>family</button>.
+        </p>
       </div>
     </div>
   </section>
@@ -73,4 +126,135 @@ const countsByCategory = Object.fromEntries(
       </div>
     </section>
   )}
+
+  <script is:inline define:vars={{ searchIndex }}>
+    const input = document.querySelector('[data-search-input]');
+    const results = document.querySelector('[data-search-results]');
+    const suggestions = document.querySelectorAll('[data-search-suggest]');
+    if (!input || !results) {
+      // Nothing to do if the markup isn't on the page (defensive).
+    } else {
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function score(item, q) {
+        const name = item.name.toLowerCase();
+        const cat = item.categoryTitle.toLowerCase();
+        const desc = item.description.toLowerCase();
+        let s = 0;
+        if (name === q) s += 100;
+        if (name.startsWith(q)) s += 30;
+        if (name.includes(q)) s += 15;
+        if (cat.includes(q)) s += 8;
+        if (desc.includes(q)) s += 3;
+        // Small boost for Lloyd's picks so they bubble up on tied scores.
+        if (item.lloydsPick) s += 1;
+        return s;
+      }
+
+      function highlight(text, q) {
+        if (!q) return escapeHtml(text);
+        const idx = text.toLowerCase().indexOf(q.toLowerCase());
+        if (idx === -1) return escapeHtml(text);
+        const before = text.slice(0, idx);
+        const match = text.slice(idx, idx + q.length);
+        const after = text.slice(idx + q.length);
+        return `${escapeHtml(before)}<mark class="rounded bg-clay-200/70 px-0.5 text-mountain-900">${escapeHtml(match)}</mark>${escapeHtml(after)}`;
+      }
+
+      function render(matches, q) {
+        if (matches.length === 0) {
+          results.innerHTML = `
+            <div class="px-5 py-6 text-center text-sm text-mountain-500">
+              No matches for <span class="font-semibold text-mountain-700">"${escapeHtml(q)}"</span>.
+              Try browsing <a href="/" class="text-forest-700 underline">a category</a>.
+            </div>`;
+          return;
+        }
+        results.innerHTML = matches
+          .map((m) => {
+            const photo = m.photo
+              ? `<img src="${escapeHtml(m.photo)}" alt="" class="h-12 w-12 shrink-0 rounded-lg object-cover" loading="lazy"/>`
+              : `<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-sand-100 text-xl">${m.categoryEmoji}</div>`;
+            const pick = m.lloydsPick
+              ? `<span class="ml-2 inline-flex items-center gap-0.5 rounded-full bg-clay-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">★ Pick</span>`
+              : '';
+            return `
+              <a href="/listings/${escapeHtml(m.slug)}"
+                 class="flex items-center gap-3 px-4 py-3 transition hover:bg-sand-50"
+                 role="option">
+                ${photo}
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center">
+                    <p class="truncate font-display text-base font-semibold text-mountain-900">${highlight(m.name, q)}</p>
+                    ${pick}
+                  </div>
+                  <p class="truncate text-xs text-mountain-500">${m.categoryEmoji} ${escapeHtml(m.categoryTitle)}</p>
+                </div>
+                <span class="shrink-0 text-mountain-300">→</span>
+              </a>
+            `;
+          })
+          .join('');
+      }
+
+      function update() {
+        const q = input.value.trim();
+        if (q.length < 2) {
+          results.classList.add('hidden');
+          input.setAttribute('aria-expanded', 'false');
+          return;
+        }
+        const ranked = searchIndex
+          .map((item) => ({ item, s: score(item, q.toLowerCase()) }))
+          .filter((r) => r.s > 0)
+          .sort((a, b) => b.s - a.s)
+          .slice(0, 8)
+          .map((r) => r.item);
+        render(ranked, q);
+        results.classList.remove('hidden');
+        input.setAttribute('aria-expanded', 'true');
+      }
+
+      input.addEventListener('input', update);
+      input.addEventListener('focus', () => {
+        if (input.value.trim().length >= 2) {
+          results.classList.remove('hidden');
+          input.setAttribute('aria-expanded', 'true');
+        }
+      });
+
+      // Hide on outside click
+      document.addEventListener('click', (e) => {
+        if (!e.target) return;
+        if (!(e.target).closest || !(e.target).closest('#cos-search-results, [data-search-input]')) {
+          results.classList.add('hidden');
+          input.setAttribute('aria-expanded', 'false');
+        }
+      });
+
+      // Hide on Escape
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          results.classList.add('hidden');
+          input.setAttribute('aria-expanded', 'false');
+          input.blur();
+        }
+      });
+
+      // Suggestion buttons
+      suggestions.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          input.value = btn.textContent || '';
+          input.focus();
+          update();
+        });
+      });
+    }
+  </script>
 </Layout>
